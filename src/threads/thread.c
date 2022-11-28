@@ -292,6 +292,8 @@ thread_exit (void)
 
 #ifdef USERPROG
   process_exit ();
+/*edited stuff*/
+  int exit_code;
 #endif
 
   /* Remove thread from all threads list, set our status to dying,

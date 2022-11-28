@@ -20,16 +20,20 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void push_arguments (const char *[], int cnt, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
+
 process_execute (const char *file_name) 
 {
   char *fn_copy;
   tid_t tid;
+
+  char *save_ptr;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -37,6 +41,7 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  file_name = strtok_r(file_name, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
@@ -54,20 +59,38 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+	
+  // char s[] = " String to tokenize.  ";
+  char *token, *save_ptr;
+
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
+      token = strtok_r(NULL, " ", &save_ptr))
+     printf(" '%s'\n",token);
+
+
+//edited as well//
+// cmdline handling
+const char **cmdline_tokens = (const char**) palloc_get_page(0);
+int cnt = 0;
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-
+  void **esp = &if_.esp;
   success = load (file_name, &if_.eip, &if_.esp);
-  
+  if (success) {
+    push_arguments (cmdline_tokens, cnt, &if_.esp);
+  }
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
+  // stack testing
+  hex_dump((uintptr_t)*esp, *esp, PHYS_BASE - *esp, true);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -119,6 +142,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  /*changes made here*/
+  printf("%s:exit_code stuff -_-: (%d)\n",cur->name,cur->exit_code);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -298,7 +323,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable))
+	  			      read_bytes, zero_bytes, writable))
                 goto done;
             }
           else
@@ -430,6 +455,50 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+// My Implementation
+// Pushing Arguments onto the stack
+
+static void
+push_arguments (const char* cmdline_tokens[], int argc, void **esp)
+{
+  ASSERT(argc >= 0);
+
+  int i, len = 0;
+  void* argv_addr[argc];
+  for (i = 0; i < argc; i++) {
+    len = strlen(cmdline_tokens[i]) + 1;
+    *esp -= len;
+    memcpy(*esp, cmdline_tokens[i], len);
+    argv_addr[i] = *esp;
+  }
+
+  // word align
+  *esp = (void*)((unsigned int)(*esp) & 0xfffffffc);
+
+  // last null
+  *esp -= 4;
+  *((uint32_t*) *esp) = 0;
+
+  // setting **esp with argvs
+  for (i = argc - 1; i >= 0; i--) {
+    *esp -= 4;
+    *((void**) *esp) = argv_addr[i];
+  }
+
+  // setting **argv (addr of stack, esp)
+  *esp -= 4;
+  *((void**) *esp) = *argv_addr;
+
+  // setting argc
+  *esp -= 4;
+  *((int*) *esp) = argc;
+
+  // setting ret addr
+  *esp -= 4;
+  *((int*) *esp) = 0;
+
+}
+
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
@@ -443,7 +512,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success) {
-        *esp = PHYS_BASE-12;
+        *esp = PHYS_BASE;
       } else
         palloc_free_page (kpage);
     }

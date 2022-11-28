@@ -24,6 +24,11 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#ifdef USERPROG
+# define RET_STATUS_DEFAULT 0xcdcdcdcd
+# define RET_STATUS_INVALID 0xdcdcdcdc
+#endif
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -100,6 +105,9 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+  
+    /*7 November Edit on how to print out file name and exit code */
+    int exit_code;
   };
 
 /* If false (default), use round-robin scheduler.
