@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+//change push arguments
 static void push_arguments (const char *[], int cnt, void **esp);
 
 /* Starts a new thread running a user program loaded from
