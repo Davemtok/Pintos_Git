@@ -27,14 +27,12 @@ static void push_arguments (const char *[], int cnt, void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-
 process_execute (const char *file_name) 
 {
   char *fn_copy;
   tid_t tid;
 
   char *save_ptr;
-
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -56,23 +54,32 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-	
-  // char s[] = " String to tokenize.  ";
   char *token, *save_ptr;
 
-  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
-      token = strtok_r(NULL, " ", &save_ptr))
-     printf(" '%s'\n",token);
+  //char *file_name = strtok_r(file_name_, " ", &save_ptr);
+  //this print the arguments i use this code
+  char *file_name = file_name_;
 
+   // char s[] = " String to tokenize.  ";
+
+
+  // for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
+  //     token = strtok_r(NULL, " ", &save_ptr))
+  //     printf(" '%s'\n",token);
 
 //edited as well//
 // cmdline handling
 const char **cmdline_tokens = (const char**) palloc_get_page(0);
 int cnt = 0;
-
+// this is the tokenisation
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
+      token = strtok_r(NULL, " ", &save_ptr)){
+        //05/12/2022
+        //this stores the arguments insude the ocmand line tokens array
+        cmdline_tokens[cnt++]=token;
+      printf(" '%s'\n",token);}
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -83,20 +90,21 @@ int cnt = 0;
   if (success) {
     push_arguments (cmdline_tokens, cnt, &if_.esp);
   }
-
+  palloc_free_page(cmdline_tokens);
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
-  // stack testing
-  hex_dump((uintptr_t)*esp, *esp, PHYS_BASE - *esp, true);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  hex_dump(*esp, *esp, PHYS_BASE - *esp, true);
+
+
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -142,8 +150,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  /*changes made here*/
-  printf("%s:exit_code stuff -_-: (%d)\n",cur->name,cur->exit_code);
+    /*changes made here*/
+    printf("%s:exit_code stuff -_-: (%d)\n",cur->name,cur->exit_code);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -161,7 +169,8 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
+
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -323,7 +332,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
-	  			      read_bytes, zero_bytes, writable))
+                                 read_bytes, zero_bytes, writable))
                 goto done;
             }
           else
@@ -346,7 +355,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
@@ -455,9 +465,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
-// My Implementation
+// This is my implementation
 // Pushing Arguments onto the stack
-
 static void
 push_arguments (const char* cmdline_tokens[], int argc, void **esp)
 {
@@ -465,7 +474,7 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
 
   int i, len = 0;
   void* argv_addr[argc];
-  for (i = 0; i < argc; i++) {
+  for (i = argc-1; i >= 0; i--) {
     len = strlen(cmdline_tokens[i]) + 1;
     *esp -= len;
     memcpy(*esp, cmdline_tokens[i], len);
@@ -473,7 +482,10 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
   }
 
   // word align
-  *esp = (void*)((unsigned int)(*esp) & 0xfffffffc);
+  // *esp = (void*)((unsigned int)(*esp) & 0xfffffffc);
+  int word_align = (uintptr_t)(* esp) % 4;
+  memset (* esp -= word_align, 0 , word_align);
+
 
   // last null
   *esp -= 4;
@@ -486,18 +498,22 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
   }
 
   // setting **argv (addr of stack, esp)
-  *esp -= 4;
-  *((void**) *esp) = *argv_addr;
+   char **argv_ptr = *esp;
+        *esp = (char *) *esp - sizeof(char **);
+        memcpy(*esp, &argv_ptr, sizeof(char **));
 
-  // setting argc
-  *esp -= 4;
-  *((int*) *esp) = argc;
+        // push argc
+        *esp = (char *) *esp - sizeof(int);
+        memcpy(*esp, &argc, sizeof(int));
 
   // setting ret addr
-  *esp -= 4;
-  *((int*) *esp) = 0;
+  // push fake return address
+        void *ret = 0;
+        *esp = (char *) *esp - sizeof(void *);
+        memcpy(*esp, &ret, sizeof(void *));
 
 }
+
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
@@ -531,12 +547,11 @@ setup_stack (void **esp)
 static bool
 install_page (void *upage, void *kpage, bool writable)
 {
-  struct thread *t = thread_current ();
+  struct thread *t = thread_current();
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+  return (pagedir_get_page (t->pagedir, upage) == NULL && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
 //--------------------------------------------------------------------
