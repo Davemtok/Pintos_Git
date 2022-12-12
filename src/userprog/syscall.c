@@ -51,8 +51,10 @@ syscall_handler (struct intr_frame *f )
     // int ret = exec((const char *)*(esp + 1));
 
     //int code_tester = 0;
+    // int code_tester = 9;
+    //int code_tester = 3;
     
-    switch (*(int*)(esp)) 
+    switch (*(int*)(esp )) 
     { 
 
         case SYS_HALT: // 0
@@ -71,16 +73,26 @@ syscall_handler (struct intr_frame *f )
 
         case SYS_EXEC: // 2
         {
-            printf("SYSTEM EXECUTE ACTIVATED");
+            
             const char* cmdline=*(char**)(f->esp + 4);
             f->eax  = process_execute((const char*) cmdline);
+            break;
+        }
+
+        case SYS_CREATE: // 4
+        {
+            char *name=*( char**)(esp + 4);
+            unsigned size=*( unsigned*)(esp + 8);
+            lock_acquire(&files_lock);
+            f->eax=filesys_create(name,size );
+            lock_release(&files_lock);
+            printf("System Call Executed Successfully\n");
             break;
         }
 
 
         case SYS_REMOVE: // 5
         {
-            printf("SYSTEM REMOVE ACTIVATED");
             char *name=*( char**)(esp + 4);
             lock_acquire(&files_lock);
             f->eax=filesys_remove(name);
