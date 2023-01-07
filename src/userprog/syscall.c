@@ -1,14 +1,4 @@
-// #include "userprog/syscall.h"
-// #include <stdio.h>
-// #include <syscall-nr.h>
-// #include "threads/interrupt.h"
-// #include "threads/thread.h"
 #include "filesys/directory.h"
-// #include "filesys/filesys.h"
-// #include "filesys/file.h"
-// #include "devices/shutdown.h"
-// #include "userprog/process.h"
-
 #include "userprog/syscall.h"
 #include "userprog/process.h"
 #include <stdio.h>
@@ -93,7 +83,10 @@ syscall_handler (struct intr_frame *f )
 
         case SYS_REMOVE: // 5
         {
+            // in this case we use name which is the string character
+            // For the system call remove we increased the stack pointer by 4 ans mast it by the char pointer and go inside it
             char *name=*( char**)(esp + 4);
+            // in order to prevent a race condition attack
             lock_acquire(&files_lock);
             f->eax=filesys_remove(name);
             lock_release(&files_lock);
@@ -111,7 +104,8 @@ syscall_handler (struct intr_frame *f )
             putbuf(buffer, size);
             int ret_write = size;
             f->eax = ret_write;
-            break;}
+            break;
+        }
 
         default :
             printf("No SYSTEM CALL %d \n", *(int*)(esp));

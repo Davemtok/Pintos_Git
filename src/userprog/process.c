@@ -83,15 +83,18 @@ int cnt = 0;
       printf(" '%s'\n",token);}
       
   /* Initialize interrupt frame and load executable. */
+  /* In other words the stack setup */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   void **esp = &if_.esp;
   success = load (file_name, &if_.eip, &if_.esp);
+
   if (success) {
     push_arguments (cmdline_tokens, cnt, &if_.esp);
   }
+
   palloc_free_page(cmdline_tokens);
   /* If load failed, quit. */
   palloc_free_page (file_name);
